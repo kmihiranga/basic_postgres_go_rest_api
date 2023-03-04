@@ -1,17 +1,23 @@
 package main
 
 import (
+	"context"
 	"log"
 )
 
 func main() {
-	store, err := NewPostgressStore()
+	ctx := context.Background()
+
+	store, err := NewPostgressStore(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// fmt.Printf("%v+\n", store)
 
-	server := NewServer(":3000", store)
-	server.Run()
+	if err := store.Init(ctx); err != nil {
+		log.Fatalf("error initializing postgres tables. %v", err)
+	}
+	server := NewServer(store)
+	server.Run(":3000")
 }

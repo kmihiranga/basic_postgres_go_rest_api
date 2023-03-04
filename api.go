@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -35,23 +40,53 @@ type APIServer struct {
 	store      Storage
 }
 
-func NewServer(listenAddr string, store Storage) *APIServer {
+// type APIServer struct {
+// 	server http.Server
+// 	store  Storage
+// }
+
+func NewServer(store Storage) *APIServer {
 	return &APIServer{
-		listenAddr: listenAddr,
-		store:      store,
+		store: store,
 	}
 }
 
-func (s *APIServer) Run() {
+func (s *APIServer) Run(listenAddr string) {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleAccount))
-
 	router.Handle("/account/{id}", makeHTTPHandleFunc(s.handleGetAccount))
 
+	srv := &http.Server{
+		Addr:    listenAddr,
+		Handler: router,
+	}
 	log.Println("JSON API Server running on port: ", s.listenAddr)
 
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, syscall.SIGINT, syscall.SIGTERM)
+		<-sigint
+
+		log.Println("service interrupt received.")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("http shutdown error. %v", err)
+		}
+
+		log.Println("shutdown complete")
+
+		close(idleConnsClosed)
+	}()
+
 	http.ListenAndServe(s.listenAddr, router)
+
+	<-idleConnsClosed
+	log.Println("service stopped successfully!")
 }
 
 func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error {

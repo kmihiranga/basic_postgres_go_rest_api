@@ -19,8 +19,7 @@ type PostgresStore struct {
 	db *pgx.Conn
 }
 
-func NewPostgressStore() (*PostgresStore, error) {
-	ctx := context.Background()
+func NewPostgressStore(ctx context.Context) (*PostgresStore, error) {
 	connStr := fmt.Sprintf("postgres://%s:%s@localhost:5432/postgres_rest", "postgres", "1234")
 	conn, err := pgx.Connect(ctx, connStr)
 	if err != nil {
@@ -32,6 +31,24 @@ func NewPostgressStore() (*PostgresStore, error) {
 	return &PostgresStore{
 		db: conn,
 	}, nil
+}
+
+func (s *PostgresStore) Init(ctx context.Context) error {
+	return s.CreateAccountTable(ctx)
+}
+
+func (s *PostgresStore) CreateAccountTable(ctx context.Context) error {
+	queryStr := `create table if not exists accounts (
+		id varchar(255) primary key,
+		first_name varchar(50),
+		last_name varchar(50),
+		number serial,
+		balance serial,
+		created_at timestamp
+	)`
+
+	_, err := s.db.Exec(ctx, queryStr)
+	return err
 }
 
 func (s *PostgresStore) CreateAccount(*Account) error {
